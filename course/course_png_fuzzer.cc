@@ -34,12 +34,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     return 0;
   }
 
-  uint8_t* rgba = NULL;
-  png_bytep* rows = NULL;
-
   if (setjmp(png_jmpbuf(png_ptr))) {
-    free(rgba);
-    free(rows);
     safe_png_cleanup(png_ptr, info_ptr);
     return 0;
   }
@@ -84,32 +79,25 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
   png_size_t rowbytes = png_get_rowbytes(png_ptr, info_ptr);
   if (rowbytes == 0 || height == 0 || height > (1u << 22)) {
-    free(rgba);
-    free(rows);
     safe_png_cleanup(png_ptr, info_ptr);
     return 0;
   }
 
   size_t total = rowbytes * (size_t)height;
   if (total > (32u * 1024u * 1024u)) {
-    free(rgba);
-    free(rows);
     safe_png_cleanup(png_ptr, info_ptr);
     return 0;
   }
 
-  rgba = (uint8_t*)malloc(total);
+  uint8_t* rgba = (uint8_t*)malloc(total);
   if (!rgba) {
-    free(rgba);
-    free(rows);
     safe_png_cleanup(png_ptr, info_ptr);
     return 0;
   }
 
-  rows = (png_bytep*)malloc(sizeof(png_bytep) * (size_t)height);
+  png_bytep* rows = (png_bytep*)malloc(sizeof(png_bytep) * (size_t)height);
   if (!rows) {
     free(rgba);
-    free(rows);
     safe_png_cleanup(png_ptr, info_ptr);
     return 0;
   }
