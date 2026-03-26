@@ -19,25 +19,22 @@ static void safe_png_cleanup(png_structp png_ptr, png_infop info_ptr) {
 extern "C" void course_preparse_trigger(const uint8_t* raw, size_t raw_size);
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-  if (size < 8) return 0;
+  if (size < 2) return 0;               // allow tiny inputs for preparse trigger
 
-  png_structp png_ptr = nullptr;
-  png_infop info_ptr = nullptr;
-  uint8_t* rgba = nullptr;
-  png_bytep* rows = nullptr;
+  // course_preparse_trigger(data, size);  // run trigger even if PNG parsing is skipped
 
-  png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
+  if (size < 8) return 0;               // PNG header parsing needs at least 8 bytes
+
+  png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
   if (!png_ptr) return 0;
 
-  info_ptr = png_create_info_struct(png_ptr);
+  png_infop info_ptr = png_create_info_struct(png_ptr);
   if (!info_ptr) {
     safe_png_cleanup(png_ptr, nullptr);
     return 0;
   }
 
   if (setjmp(png_jmpbuf(png_ptr))) {
-    free(rgba); 
-    free(rows);
     safe_png_cleanup(png_ptr, info_ptr);
     return 0;
   }
@@ -59,25 +56,28 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   };
 
   png_set_read_fn(png_ptr, &mem, read_fn);
+
   png_read_info(png_ptr, info_ptr);
 
   png_uint_32 width = 0, height = 0;
-  int bit_depth = 0, color_type = 0;
+  int bit_depth = 0, color_type = 0, interlace_type = 0, compression_type = 0, filter_method = 0;
   png_get_IHDR(png_ptr, info_ptr, &width, &height, &bit_depth, &color_type,
-               nullptr, nullptr, nullptr);
+               &interlace_type, &compression_type, &filter_method);
 
   if (bit_depth == 16) png_set_strip_16(png_ptr);
   if (color_type == PNG_COLOR_TYPE_PALETTE) png_set_palette_to_rgb(png_ptr);
   if (color_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8) png_set_expand_gray_1_2_4_to_8(png_ptr);
   if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS)) png_set_tRNS_to_alpha(png_ptr);
-  if (color_type == PNG_COLOR_TYPE_RGB || color_type == PNG_COLOR_TYPE_GRAY || color_type == PNG_COLOR_TYPE_PALETTE)
+  if (color_type == PNG_COLOR_TYPE_RGB ||
+      color_type == PNG_COLOR_TYPE_GRAY ||
+      color_type == PNG_COLOR_TYPE_PALETTE)
     png_set_filler(png_ptr, 0xFF, PNG_FILLER_AFTER);
   if (color_type == PNG_COLOR_TYPE_GRAY || color_type == PNG_COLOR_TYPE_GRAY_ALPHA)
     png_set_gray_to_rgb(png_ptr);
 
   png_read_update_info(png_ptr, info_ptr);
-  png_size_t rowbytes = png_get_rowbytes(png_ptr, info_ptr);
 
+  png_size_t rowbytes = png_get_rowbytes(png_ptr, info_ptr);
   if (rowbytes == 0 || height == 0 || height > (1u << 22)) {
     safe_png_cleanup(png_ptr, info_ptr);
     return 0;
@@ -89,13 +89,13 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     return 0;
   }
 
-  rgba = (uint8_t*)malloc(total);
+  uint8_t* rgba = (uint8_t*)malloc(total);
   if (!rgba) {
     safe_png_cleanup(png_ptr, info_ptr);
     return 0;
   }
 
-  rows = (png_bytep*)malloc(sizeof(png_bytep) * (size_t)height);
+  png_bytep* rows = (png_bytep*)malloc(sizeof(png_bytep) * (size_t)height);
   if (!rows) {
     free(rgba);
     safe_png_cleanup(png_ptr, info_ptr);
