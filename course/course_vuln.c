@@ -16,7 +16,7 @@ static void bug1_use_after_free(const uint8_t* rgba, size_t rgba_size) {
   if (rgba_size < 16) return;
   uint8_t* tmp = (uint8_t*)malloc(16);
   if (!tmp) return;
-  memcpy(rgba, tmp, 16);
+  memcpy(tmp, rgba, 16);
   free(tmp);
 
   // INTENTIONAL BUG: use-after-free
